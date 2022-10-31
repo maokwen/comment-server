@@ -1,6 +1,3 @@
-[default]
-template_dir = "static"
-
 [default.databases.comment_db]
 url = "db/comment.sqlite"
 
