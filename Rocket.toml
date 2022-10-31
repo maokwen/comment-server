@@ -1,0 +1,9 @@
+[default]
+template_dir = "static"
+
+[default.databases.comment_db]
+url = "db/comment.sqlite"
+
+[release]
+address = "0.0.0.0"
+port = 8003
