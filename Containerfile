@@ -16,14 +16,14 @@ RUN cargo build --release
 
 # runner
 FROM docker.io/alpine:latest
-RUN addgroup -g 1000 comment-server
-RUN adduser -D -s /bin/sh -u 1000 -G comment-server comment-server
+RUN addgroup -g 1000 app
+RUN adduser -D -s /bin/sh -u 1000 -G app app
 
 WORKDIR /app
 COPY --from=builder /workspace/target/release/comment-server /app/comment-server
 COPY --from=builder /workspace/db /app/db
 COPY --from=builder /workspace/Rocket.toml /app/Rocket.toml
 
-RUN chown comment-server:comment-server comment-server
-USER comment-server
+RUN chown -R app:app /app
+USER app
 CMD ["/app/comment-server"]
