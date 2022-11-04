@@ -22,6 +22,7 @@ jobs:
         with:
           image: maokwen/comment-server
           tags: latest
+          layers: true
           containerfiles: |
             ./Containerfile
 
