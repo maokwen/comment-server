@@ -1,0 +1,3 @@
+[push]
+url = "https://api.day.app/push"
+device_key = ""

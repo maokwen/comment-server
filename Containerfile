@@ -1,7 +1,7 @@
 # builder
 FROM docker.io/rust:alpine as builder
 WORKDIR /workspace
-RUN apk add --no-cache musl-dev sqlite
+RUN apk add --no-cache openssl-dev musl-dev sqlite pkgconf
 
 # build deps
 COPY Cargo.toml Cargo.toml
@@ -23,6 +23,7 @@ WORKDIR /app
 COPY --from=builder /workspace/target/release/comment-server /app/comment-server
 COPY --from=builder /workspace/db /app/db
 COPY --from=builder /workspace/Rocket.toml /app/Rocket.toml
+COPY --from=builder /workspace/Config.toml /app/Config.toml
 
 RUN chown -R app:app /app
 USER app

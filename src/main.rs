@@ -6,17 +6,17 @@ extern crate rocket_sync_db_pools;
 #[cfg(test)]
 mod test;
 
-use rocket::http::Header;
-use rocket::{Request, Response};
 use rocket::fairing::{AdHoc, Fairing, Info, Kind};
+use rocket::http::Header;
+use rocket::log::private::warn;
 use rocket::response::{status::Created, Debug};
 use rocket::serde::{json::Json, Deserialize, Serialize};
 use rocket::{Build, Rocket};
+use rocket::{Request, Response};
 use rocket_sync_db_pools::rusqlite;
-
+use std::result::Result;
 use self::rusqlite::params;
-
-use chrono::{TimeZone, Utc, FixedOffset};
+use chrono::{FixedOffset, TimeZone, Utc};
 
 #[database("comment_db")]
 
@@ -33,10 +33,65 @@ struct Comment {
     text: String,
 }
 
-type Result<T, E = Debug<rusqlite::Error>> = std::result::Result<T, E>;
+#[derive(Deserialize, Debug)]
+pub struct Config {
+    push: PushConfig,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct PushConfig {
+    pub url: String,
+    pub device_key: String,
+}
+
+fn read_config(filename: String) -> Result<Config, Box<dyn std::error::Error>> {
+    let content = std::fs::read_to_string(filename)?;
+    Ok(toml::from_str(&content)?)
+}
+
+#[macro_use]
+extern crate lazy_static;
+lazy_static! {
+    pub static ref CONFIG: Config = read_config("Config.toml".to_owned()).unwrap();
+}
+
+async fn notify(comment: &Json<Comment>) -> Result<(), Debug<reqwest::Error>> {
+    // push notification
+    let title = format!("{} on {}", &comment.user, &comment.page);
+    let msg = &comment.text;
+    let device_key = CONFIG.push.device_key.clone();
+    let data = format!(
+        r#"
+        {{
+            "title": "{}",
+            "body": "{}",
+            "device_key": "{}"
+        }}"#,
+        title, msg, device_key
+    );
+
+    // make a post request to push notification server
+    let resp: reqwest::Response = reqwest::Client::new()
+        .post(CONFIG.push.url.as_str())
+        .header("Content-Type", "application/json; charset=utf-8")
+        .body(data)
+        .send()
+        .await?;
+
+    if resp.error_for_status_ref().is_err() {
+        let status = resp.status();
+        let text = resp.text().await?;
+        warn!("{}: {}", status.as_str(), text.as_str());
+    }
+
+    Ok(())
+}
 
 #[post("/", data = "<comment>")]
-async fn post(db: Db, comment: Json<Comment>) -> Result<Created<Json<Comment>>> {
+async fn post(
+    db: Db,
+    comment: Json<Comment>,
+) -> Result<Created<Json<Comment>>, Debug<rusqlite::Error>> {
     let item = comment.clone();
 
     let now = Utc::now().naive_utc();
@@ -52,25 +107,32 @@ async fn post(db: Db, comment: Json<Comment>) -> Result<Created<Json<Comment>>> 
     })
     .await?;
 
+    info!("inserted: {:?}", comment);
+    // try post notification
+    if notify(&comment).await.is_err() {
+        warn!("push notification failed");
+    }
+
     Ok(Created::new("/").body(comment))
 }
 
 #[get("/<page>")]
-async fn list(db: Db, page: String) -> Result<Json<Vec<Comment>>> {
-    let comments = db.run(move |conn| {
-        conn.prepare("SELECT id, date, page, user, text FROM comments WHERE page = ?1")?
-        .query_map(params![page],|r| {
-            Ok(Comment {
-                id: Some(r.get(0)?),
-                date: Some(r.get(1)?),
-                page: r.get(2)?,
-                user: r.get(3)?,
-                text: r.get(4)?,
-            })
-        })?
-        .collect::<Result<Vec<Comment>, _>>()
-    })
-    .await?;
+async fn list(db: Db, page: String) -> Result<Json<Vec<Comment>>, Debug<rusqlite::Error>> {
+    let comments = db
+        .run(move |conn| {
+            conn.prepare("SELECT id, date, page, user, text FROM comments WHERE page = ?1")?
+                .query_map(params![page], |r| {
+                    Ok(Comment {
+                        id: Some(r.get(0)?),
+                        date: Some(r.get(1)?),
+                        page: r.get(2)?,
+                        user: r.get(3)?,
+                        text: r.get(4)?,
+                    })
+                })?
+                .collect::<Result<Vec<Comment>, _>>()
+        })
+        .await?;
 
     Ok(Json(comments))
 }
@@ -106,13 +168,16 @@ impl Fairing for CORS {
     fn info(&self) -> Info {
         Info {
             name: "Add CORS headers to responses",
-            kind: Kind::Response
+            kind: Kind::Response,
         }
     }
 
     async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
         response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
-        response.set_header(Header::new("Access-Control-Allow-Methods", "POST, GET, PATCH, OPTIONS"));
+        response.set_header(Header::new(
+            "Access-Control-Allow-Methods",
+            "POST, GET, PATCH, OPTIONS",
+        ));
         response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
         response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
     }
