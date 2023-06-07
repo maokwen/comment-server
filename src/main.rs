@@ -8,7 +8,7 @@ mod test;
 
 use rocket::fairing::{AdHoc, Fairing, Info, Kind};
 use rocket::http::Header;
-use rocket::log::private::warn;
+use rocket::log::private::{warn, info};
 use rocket::response::{status::Created, Debug};
 use rocket::serde::{json::Json, Deserialize, Serialize};
 use rocket::{Build, Rocket};
@@ -70,6 +70,8 @@ async fn notify(comment: &Json<Comment>) -> Result<(), Debug<reqwest::Error>> {
         title, msg, device_key
     );
 
+    info!("push notification: {}", data);
+
     // make a post request to push notification server
     let resp: reqwest::Response = reqwest::Client::new()
         .post(CONFIG.push.url.as_str())
@@ -88,10 +90,7 @@ async fn notify(comment: &Json<Comment>) -> Result<(), Debug<reqwest::Error>> {
 }
 
 #[post("/", data = "<comment>")]
-async fn post(
-    db: Db,
-    comment: Json<Comment>,
-) -> Result<Created<Json<Comment>>, Debug<rusqlite::Error>> {
+async fn post(db: Db, comment: Json<Comment>) -> Result<Created<Json<Comment>>, Debug<rusqlite::Error>> {
     let item = comment.clone();
 
     let now = Utc::now().naive_utc();
@@ -174,10 +173,7 @@ impl Fairing for CORS {
 
     async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
         response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
-        response.set_header(Header::new(
-            "Access-Control-Allow-Methods",
-            "POST, GET, PATCH, OPTIONS",
-        ));
+        response.set_header(Header::new("Access-Control-Allow-Methods", "POST, GET, PATCH, OPTIONS"));
         response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
         response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
     }
