@@ -55,28 +55,33 @@ lazy_static! {
     pub static ref CONFIG: Config = read_config("Config.toml".to_owned()).unwrap();
 }
 
-async fn notify(comment: &Json<Comment>) -> Result<(), Debug<reqwest::Error>> {
+#[derive(Serialize, Deserialize)]
+pub struct PushData {
+    pub title: String,
+    pub body: String,
+    pub device_key: String,
+}
+
+async fn notify(comment: &Json<Comment>) -> Result<(), Box<dyn std::error::Error>> {
     // push notification
     let title = format!("{} on {}", &comment.user, &comment.page);
-    let msg = &comment.text;
+    let body = comment.text.clone();
     let device_key = CONFIG.push.device_key.clone();
-    let data = format!(
-        r#"
-        {{
-            "title": "{}",
-            "body": "{}",
-            "device_key": "{}"
-        }}"#,
-        title, msg, device_key
-    );
+    let data = PushData {
+        title,
+        body,
+        device_key,
+    };
 
-    info!("push notification: {}", data);
+    let json_str = serde_json::to_string(&data)?;
+
+    info!("push notification: {}", &json_str);
 
     // make a post request to push notification server
     let resp: reqwest::Response = reqwest::Client::new()
         .post(CONFIG.push.url.as_str())
         .header("Content-Type", "application/json; charset=utf-8")
-        .body(data)
+        .body(json_str)
         .send()
         .await?;
 
