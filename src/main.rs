@@ -31,6 +31,7 @@ struct Comment {
     page: String,
     user: String,
     text: String,
+    email: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -105,8 +106,8 @@ async fn post(db: Db, comment: Json<Comment>) -> Result<Created<Json<Comment>>, 
 
     db.run(move |conn| {
         conn.execute(
-            "INSERT INTO comments (date, page, user, text) VALUES (?1, ?2, ?3, ?4)",
-            params![date_str, item.page, item.user, item.text],
+            "INSERT INTO comments (date, page, user, text, email) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![date_str, item.page, item.user, item.text, item.email],
         )
     })
     .await?;
@@ -132,6 +133,7 @@ async fn list(db: Db, page: String) -> Result<Json<Vec<Comment>>, Debug<rusqlite
                         page: r.get(2)?,
                         user: r.get(3)?,
                         text: r.get(4)?,
+                        email: None,
                     })
                 })?
                 .collect::<Result<Vec<Comment>, _>>()
@@ -148,14 +150,15 @@ async fn init_db(rocket: Rocket<Build>) -> Rocket<Build> {
         .run(|conn| {
             conn.execute(
                 r#"
-            CREATE TABLE IF NOT EXISTS comments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date VARCHAR NOT NULL,
-                page VARCHAR NOT NULL,
-                user VARCHAR NOT NULL,
-                text VARCHAR NOT NULL
-            );
-            "#,
+            CREATE TABLE IF NOT EXISTS "comments" (
+                "id"	INTEGER,
+                "date"	TEXT NOT NULL,
+                "page"	TEXT NOT NULL,
+                "user"	TEXT NOT NULL,
+                "text"	TEXT NOT NULL,
+                "email"	TEXT,
+                PRIMARY KEY("id" AUTOINCREMENT)
+            );"#,
                 params![],
             )
         })

@@ -8,6 +8,7 @@ struct Comment {
     page: String,
     user: String,
     text: String,
+    email: Option<String>,
 }
 
 #[test]
@@ -25,7 +26,8 @@ fn test() {
         let page = "aaa".to_string();
         let user = "user1".to_string();
         let text = format!("msg msg {}", i);
-        let msg = Comment { page, user, text };
+        let email = Some("email".to_owned());
+        let msg = Comment { page, user, text, email };
 
         let response = client
             .post("/")
